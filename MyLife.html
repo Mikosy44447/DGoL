@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<!-------------------------------------------------------------------------------------------------------------------------------
+//
+// Michael's Game of Life
+// by Michael Y. Dickheiser 
+//
+// Inspired by Conway's Game of Life, but exploring the addition of multiple species, genetic mutation, and adaptation
+//
+// Species: RED, GREEN, BLUE
+// RED has greater longevity and is more able to reproduce
+// GREEN makes more efficient use of food and a high tolerance to poison (see below)
+// BLUE is more resistant to dying due to population concerns (over- or under-population)
+//
+// The Conway rules still apply by default, but you can modify the neighbor counts to get some interesting effects. Also,
+// cells don't generally die immediately when the rules normally indicate that they should. Instead they lose health over time.
+//
+// All factors regarding life/death are influenced by genetic traits in each cell's DNA. 
+//
+// Food / poison. These are placeable items. Select the one you wish to place and drop 'em in a cell. 
+// Food will cause a cell to gain health, though potentially not enough to overcome other damaging effects
+// Poison will do constant damage, partially mitigated by the poisonResistance trait. GREEN is good at this, RED and BLUE are not.
+//
+// As cells reproduce, they will use a simplistic genetic algorith to combine DNA from neighboring cells (currently 1 or 2 neighbors)
+//
+// Basic usage: 
+//
+// The simulation begins in an empty environment and in a paused state. To start placing cells, use the RED GREEN BLUE buttons to 
+// select the type (NOTE: Conway model just uses RED). When ready to kick things off, press 'Start'. You can let the simulation run
+// or you can step it one update at a time. 
+//
+// By default, the Conway model is used, doing the expected things. You can modify the neightbor count rules to get new results.
+// To change to the new hotness, select the Dickheiser model. That kicks in all the good stuff. 
+// 
+// There are environment presets that place varying amounts of food and poison. Try them!
+// 
+// There are display options. Default for the Dickheiser model shows each cell by dominant color with dna mapped to rgb. 
+// Other options show only the chosen traits for the cells. E.g. to watch the world unfold through the lens of poison resistance, 
+// choose that display option. 
+//
+// Code Files - All code is by me. 
+// MyLife.html (this file)
+// MyMath.js 
+// MyCell.js 
+// GeneticAlgorithm.js (also mine but I didn't name it the same way for some reason)
+// LifeSimulation.js
+--------------------------------------------------------------------------------------------------------------------------------->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Michael's Game of Life</title>
+    <style>
+        canvas {
+            display: block;
+            margin: auto;
+        }
+    </style>
+	
+	<!-- Load the scripts used for the Life simulation -->
+	<script src="MyMath.js"></script>
+	<script src="GeneticAlgorithm.js"></script>
+	<script src="MyCell.js"></script>
+	<script src="LifeSimulation.js"></script>
+</head>
+<body>
+
+	<!-- UI elements -->
+	<table style="border: 2px solid white; color: white; border-radius:10px; padding: 10px; width: fit-content;">
+		<td style="border: 2px solid white; color: white; border-radius:10px; padding: 10px; width: fit-content;">
+			<div style="border: 2px solid white; color: white; border-radius:10px; padding: 10px; width: fit-content;">
+			<p id="appTitle" style="color: white; font-size: 42px; margin: 0;">Michael's Game Of Life</p>
+			<p id="author" style="color: white; text-align: center; font-size: 16px; margin: 0;">Michael Y. Dickheiser</p>
+			</div>
+			<br>
+			<div>
+				<button style="color: black; width:150px; height:50px; background-color:lightblue;border-radius:10px;" id="pauseButton">Start</button>
+				<button style="color: black;  width:150px; height:50px; background-color:lightblue;border-radius:10px;"id="stepButton">Step</button>
+				<button style="color: black; width:150px; height:50px; background-color:lightblue;border-radius:10px;"id="resetButton">Reset</button>
+			</div>
+			<p id="simulationState">State: Running Generation: 0</p>
+			<br>
+			<div style="border: 2px solid white; border-radius:10px; padding: 10px; width: fit-content;">
+				<p style="color: lightgreen; font-size: 22px; margin: 0;">Edit Mode</p>
+				<br>
+				<button style="color: red; width:60px; height:30px; background-color:darkred;border-radius:10px;" id="redSpecies">RED</button>
+				<button style="color: green; width:60px; height:30px; background-color:darkgreen;border-radius:10px" id="greenSpecies">GRN</button>
+				<button style="color: blue; width:60px; height:30px;  background-color:darkblue; border-radius:10px" id="blueSpecies">BLU</button>
+				<button style="color: chartreuse; width:60px; height:30px; background-color: darkgreen" id="foodButton">Food</button>
+				<button style="color: crimson; width:60px; height:30px; background-color: darkred" id="poisonButton">Poison</button>
+			</div>
+			<br>
+			<div style="border: 2px solid white; border-radius:10px; padding: 10px; width: fit-content;">
+				<div>
+					<lable style="color: white;" for="worldPresets">Choose Environment: </lable>
+					<select id="worldPresets" name="WorldPresets">
+						<option value="presetEmpty">Default</option>
+						<option value="presetPoisonLake">Poison Lake</option>
+						<option value="presetPoisonPools">Poison Pools</option>
+						<option value="presetToxicWasteland">Toxic Wasteland</option>
+						<option value="presetEden">Garden of Eden</option>
+						<option value="presetInsaneVille">Insaneville</option>
+					</select>
+				</div>
+				<br>
+				<div>
+					<lable style="color: white;" for="displayMode">Display Mode: </lable>
+					<select id="displayMode" title="DisplayMode">
+						<option value="DisplayNormal">Normal</option>
+						<option value="DisplaySpecies">Species</option>
+						<option value="DisplayLongevity">Longevity</option>
+						<option value="DisplayReproductivity">Reproductivity</option>
+						<option value="DisplayPoisonResist">PoisonResistance</option>
+						<option value="DisplayFoodEfficiency">Food Efficiency</option>
+						<option value="DisplayOverpopResist">Overpopulation Resistance</option>
+						<option value="DisplayUnderpopResist">Underpopulation Resistance</option>
+					</select>
+				</div>
+				<br>
+				<div>
+					<lable style="color: white;" for="simType">Simulation Model:</lable>
+					<select id="simType" title="SimulationType">
+						<option value="SimTypeConway">Conway</option>
+						<option value="SimTypeDickheiser">Dickheiser</option>
+					</select>
+				</div>
+			</div>
+			<br>
+			<div style="border: 2px solid white; border-radius:10px; padding: 10px; width: fit-content;">
+				<p style="color: lightgreen; font-size: 22px; margin: 0;">Conway rule modifiers</p>
+				<br>
+				<div>
+					<p style="color: lightblue; font-size: 14px; margin: 0;">Death rules</p>
+					<label style="color: white;" for="minNeighbors">MinNeighbors</label>
+					<input type="range" id="minNeighbors" min="0" max="8" value="2">
+					<span style="color: white;">Value: <span id="minNeighborsSliderValue">2</span></span>
+				</div>
+				
+				<div>
+					<label style="color: white;" for="maxNeighbors">MaxNeighbors</label>
+					<input type="range" id="maxNeighbors" min="0" max="8" value="3">
+					<span style="color: white;">Value: <span id="maxNeighborsSliderValue">3</span></span>
+				</div>
+
+				<div>
+					<br>
+					<p style="color: lightblue; font-size: 14px; margin: 0;">Birth rules</p>
+					<label style="color: white;" for="minNeighborsForBirth">MinNeighborsForBirth</label>
+					<input type="range" id="minNeighborsForBirth" min="0" max="8" value="3">
+					<span style="color: white;">Value: <span id="minNeighborsForBirthSliderValue">3</span></span>
+				</div>
+				
+				<div>
+					<label style="color: white;" for="maxNeighborsForBirth">MaxNeighborsForBirth</label>
+					<input type="range" id="maxNeighborsForBirth" min="0" max="8" value="3">
+					<span style="color: white;">Value: <span id="maxNeighborsForBirthSliderValue">3</span></span>
+				</div>
+				<br>
+				<div>
+					<button style="color: chartreuse; background-color: darkgreen" id="resetRules">Reset Sliders</button>
+				</div>
+				
+			</div>
+			<br>
+			<div style="border: 2px solid white; border-radius:10px; padding: 10px; width: fit-content;">
+				<p style="color: lightgreen; font-size: 22px; margin: 0;">GA modifiers</p>
+				<br>
+				<div>
+					<p style="color: lightblue; font-size: 14px; margin: 0;">Mutation</p>
+					<label style="color: white;" for="mutationChance">Mutation Chance</label>
+					<input type="range" id="mutationChance" min="0" max="100" value="2">
+					<span style="color: white;">Value: <span id="mutationChanceSliderValue">2</span></span>
+				</div>
+				
+				<div>
+					<label style="color: white;" for="mutationAmount">Mutation Amount</label>
+					<input type="range" id="mutationAmount" min="0" max="100" value="3">
+					<span style="color: white;">Value: <span id="mutationAmountSliderValue">3</span></span>
+				</div>
+		
+				<br>
+				<div>
+					<button style="color: chartreuse; background-color: darkgreen" id="resetGA">Reset Sliders</button>
+				</div>
+				
+			</div>
+			<div id="celltooltip" style="position: absolute; background: lightgray; border: 1px solid black; padding: 5px; display: none;"></div>
+			<br>
+			<label style="color: white;">
+				<input type="checkbox" id="inspectCells" style="accent-color: red;">
+				Inspect Cells
+			</label>
+		</td>
+		</td>
+		<td style="border: 2px solid white; color: white; border-radius:10px; padding: 10px; width: fit-content;">
+			<canvas id="mainCanvas" width="1000" height="1000"></canvas>
+		</td>
+	</table>
+	
+	
+
+	<!-- Main app -->
+    <script>
+		document.body.style.backgroundColor = "black"; // move this ***
+		
+		const canvas = document.getElementById('mainCanvas');
+		const ctx = canvas.getContext('2d');
+		const cellTooltip = document.getElementById('celltooltip');		
+		
+		const CANVAS_SIZE = 1000; // Assuming a square for now
+		
+		// User interaction types (edit mode)
+		const INTERACTION_TYPE_CELLS = 0; 	// default is to toggle cellSize
+		const INTERACTION_TYPE_FOOD = 1; 	// place food
+		const INTERACTION_TYPE_POISON = 2;	// place poison
+		let interactionType = INTERACTION_TYPE_CELLS;
+		
+		// Display modes, for isolating specific traits and/or for artistry
+		const DISPLAY_MODE_NORMAL = 0;
+		const DISPLAY_MODE_POISON_RESIST = 1;
+		const DISPLAY_MODE_FOOD_EFFICIENCY = 2;
+		const DISPLAY_MODE_OVERPOP_RESIST = 3;
+		const DISPLAY_MODE_UNDERPOP_RESIST = 4;
+		const DISPLAY_MODE_LONGEVITY = 5;
+		const DISPLAY_MODE_REPRODUCTIVITY = 6;
+		const DISPLAY_MODE_SPECIES = 7;
+		const DISPLAY_MODE_PURE_RGB = 8;
+		let displayMode = DISPLAY_MODE_NORMAL;
+		
+		let showCellToolTips = false;
+		
+        const rows = LifeSimulation.WORLD_WIDTH;
+        const cols = LifeSimulation.WORLD_HEIGHT;
+	    const cellSize = CANVAS_SIZE / rows;
+		
+		// Update control. Pausing is...pausing. Stepping allows the user to manually advance the simulation one update at a time.
+		let paused = true;
+		let stepping = false; 
+		
+		// Create the life simulator
+		const lifeSim = new LifeSimulation();
+		
+		let selectedSpecies = Cell.SPECIES_RED;
+	
+		//---------------------------------------------------------------------------------
+		// Simulation state control
+		//---------------------------------------------------------------------------------
+		
+		function SetSimulationStateText()
+		{
+			const stateText = document.getElementById('simulationState');
+			if (paused || stepping)
+			{
+				stateText.innerText = `**Paused** Generation ${lifeSim.getGenerationCount()} Population ${lifeSim.getWorldPopulation()}`;
+			}
+			else
+			{
+				stateText.innerText = `Running Generation ${lifeSim.getGenerationCount()} Population ${lifeSim.getWorldPopulation()}`;
+			}
+			stateText.style.color = (paused || stepping) ? 'red' : 'green';
+		}
+		
+		function resetSimulation()
+		{
+			const pausebutton = document.getElementById('pauseButton');
+			pauseButton.innerText = "Start";
+			paused = true; 
+			stepping = false; 
+			lifeSim.reset();
+			drawGrid();
+			SetSimulationStateText();
+		}
+		
+		//---------------------------------------------------------------------------------
+		// Simulation manipulation
+		//---------------------------------------------------------------------------------
+		function spawnPoisonPool(x, y, width, height, poisonAmount)
+		{
+			for (i = 0; i < width; i++)
+			{
+				for (j = 0; j < height; j++)
+				{
+					lifeSim.addPoison(i + x, j + y, poisonAmount);
+				}
+			}
+		}
+		
+		//---------------------------------------------------------------------------------
+		// Setup UI
+		//---------------------------------------------------------------------------------
+		const pauseButton = document.getElementById('pauseButton');
+		pauseButton.addEventListener('click', function() 
+		{ 
+			paused = !paused; 
+			pauseButton.innerText = paused ? 'Resume' : 'Pause';
+			if (!paused)
+			{
+				stepping = false;
+			}
+			SetSimulationStateText();
+		});
+		
+		const stepButton = document.getElementById('stepButton');
+		stepButton.addEventListener('click', function() 
+		{ 
+			const pausebutton = document.getElementById('pauseButton');
+			pauseButton.innerText = "Resume";
+			
+			paused = false; 
+			stepping = true; 
+		});
+		
+		const resetButton = document.getElementById('resetButton');
+		resetButton.addEventListener('click', function() 
+		{ 
+			resetSimulation();
+		});
+		
+		const worldPresetSelector = document.getElementById('worldPresets');
+		worldPresetSelector.addEventListener('change', function()
+		{
+			resetSimulation();
+			const selectedPreset = worldPresetSelector.value;
+			
+			// Poison lake: big lake in center of the world that can eventually be cleaned up
+			if (selectedPreset == "presetPoisonLake")
+			{
+				const LAKE_WIDTH = 20;
+				const LAKE_HEIGHT = 20;
+				spawnPoisonPool(cols / 2 - LAKE_WIDTH/2, rows / 2 - LAKE_HEIGHT/2, LAKE_WIDTH, LAKE_HEIGHT, 9999);
+			}
+			// Random pools of poison that can be cleaned up over time
+			else if (selectedPreset == "presetPoisonPools")
+			{
+				let numPools = MyMath.randomIntRanged(10, 20);
+				for (let i = 0; i < numPools; i++)
+				{
+					let poolWidth = MyMath.randomIntRanged(1, 8);
+					let poolHeight = MyMath.randomIntRanged(1, 8);
+					let x = MyMath.randomIntRanged(0, cols);
+					let y = MyMath.randomIntRanged(0, rows);
+					spawnPoisonPool(x, y, poolWidth, poolHeight, 9999);
+				}
+			}
+			// Massive poison. Will take years to clean up.
+			else if (selectedPreset == "presetToxicWasteland")
+			{
+				let numPools = MyMath.randomIntRanged(40, 60);
+				for (let i = 0; i < numPools; i++)
+				{
+					let poolWidth = MyMath.randomIntRanged(3, 12);
+					let poolHeight = MyMath.randomIntRanged(3, 12);
+					let x = MyMath.randomIntRanged(0, cols);
+					let y = MyMath.randomIntRanged(0, rows);
+					spawnPoisonPool(x, y, poolWidth, poolHeight, 9999999);
+				}
+			}
+			// Unlimited food
+			else if (selectedPreset == "presetEden")
+			{
+				// Lots of neverending food
+				let numFood = MyMath.randomIntRanged(200, 500);
+				for (let i = 0; i < numFood; i++)
+				{
+					let x = MyMath.randomIntRanged(0, cols);
+					let y = MyMath.randomIntRanged(0, rows);
+					lifeSim.addFood(x, y, 999999);
+				}
+			}
+			// Food and poison together what?
+			else if (selectedPreset == "presetInsaneVille")
+			{
+				// insane mix of poison and food
+				let numPools = MyMath.randomIntRanged(30, 60);
+				for (let i = 0; i < numPools; i++)
+				{
+					let poolWidth = MyMath.randomIntRanged(1, 4);
+					let poolHeight = MyMath.randomIntRanged(1, 4);
+					let x = MyMath.randomIntRanged(0, cols);
+					let y = MyMath.randomIntRanged(0, rows);
+					spawnPoisonPool(x, y, poolWidth, poolHeight, 9999999);
+				}
+				let numFood = MyMath.randomIntRanged(30, 80);
+				for (let i = 0; i < numFood; i++)
+				{
+					let x = MyMath.randomIntRanged(0, cols);
+					let y = MyMath.randomIntRanged(0, rows);
+					lifeSim.addFood(x, y, 999999);
+				}
+			}
+			drawGrid();
+		});
+		
+		const displayModeSelector = document.getElementById('displayMode');
+		displayModeSelector.addEventListener('change', function()
+		{
+			const selectedPreset = displayModeSelector.value;
+			if (selectedPreset == "DisplayNormal")
+			{
+				displayMode = DISPLAY_MODE_NORMAL;
+			}
+			else if (selectedPreset == "DisplaySpecies")
+			{
+				displayMode = DISPLAY_MODE_SPECIES;
+			}
+			else if (selectedPreset == "DisplayPoisonResist")
+			{
+				displayMode = DISPLAY_MODE_POISON_RESIST;
+			}
+			else if (selectedPreset == "DisplayLongevity")
+			{
+				displayMode = DISPLAY_MODE_LONGEVITY;
+			}
+			else if (selectedPreset == "DisplayReproductivity")
+			{
+				displayMode = DISPLAY_MODE_REPRODUCTIVITY;
+			}
+			else if (selectedPreset == "DisplayOverpopResist")
+			{
+				displayMode = DISPLAY_MODE_OVERPOP_RESIST;
+			}
+			else if (selectedPreset == "DisplayUnderpopResist")
+			{
+				displayMode = DISPLAY_MODE_UNDERPOP_RESIST;
+			}
+			else if (selectedPreset == "DisplayFoodEfficiency")
+			{
+				displayMode = DISPLAY_MODE_FOOD_EFFICIENCY;
+			}
+			
+			drawGrid();
+		});
+		
+		const inspectCellsCheckbox = document.getElementById('inspectCells');
+		inspectCellsCheckbox.addEventListener('change', function()
+		{
+			showCellToolTips = inspectCellsCheckbox.checked;
+			if (!showCellToolTips)
+			{
+				cellTooltip.style.display = 'none';
+			}
+		});
+		
+ 		//---------------------------------------------------------------------------------
+		// Simulation rules control
+		//---------------------------------------------------------------------------------
+		const simTypeSelector = document.getElementById('simType');
+		simTypeSelector.addEventListener('change', function()
+		{
+			const selectedType = simTypeSelector.value;
+			if (selectedType == "SimTypeConway")
+			{
+				//lifeSim.reset();
+				resetSimulation();
+				lifeSim.setSimType(LifeSimulation.SIM_TYPE_CONWAY);
+			}
+			else if (selectedType == "SimTypeDickheiser")
+			{
+				resetSimulation();
+				//lifeSim.reset();
+				lifeSim.setSimType(LifeSimulation.SIM_TYPE_DICKHEISER);
+			}
+		});
+		
+		const minNeighborsSlider = document.getElementById('minNeighbors');
+		const minNeighborsSliderValue = document.getElementById('minNeighborsSliderValue');
+		minNeighborsSlider.addEventListener('input', function()
+		{
+			let min = minNeighborsSlider.value;
+			minNeighborsSliderValue.textContent = min;
+			lifeSim.setMinNeighborsForLivingCell(min);
+			//console.log(`Setting min neighbors to ${min}`);
+		});
+		
+		const maxNeighborsSlider = document.getElementById('maxNeighbors');
+		const maxNeighborsSliderValue = document.getElementById('maxNeighborsSliderValue');
+		maxNeighborsSlider.addEventListener('input', function()
+		{
+			let max = maxNeighborsSlider.value;
+			maxNeighborsSliderValue.textContent = max;
+			lifeSim.setMaxNeighborsForLivingCell(max);
+			//console.log(`Setting max neighbors to ${max}`);
+		});
+
+		const minNeighborsForBirthSlider = document.getElementById('minNeighborsForBirth');
+		const minNeighborsForBirthSliderValue = document.getElementById('minNeighborsForBirthSliderValue');
+		minNeighborsForBirthSlider.addEventListener('input', function()
+		{
+			let min = minNeighborsForBirthSlider.value;
+			minNeighborsForBirthSliderValue.textContent = min;
+			lifeSim.setMinNeighborsForCellBirth(min);
+		});
+		
+		const maxNeighborsForBirthSlider = document.getElementById('maxNeighborsForBirth');
+		const maxNeighborsForBirthSliderValue = document.getElementById('maxNeighborsForBirthSliderValue');
+		maxNeighborsForBirthSlider.addEventListener('input', function()
+		{
+			let max = maxNeighborsForBirthSlider.value;
+			maxNeighborsForBirthSliderValue.textContent = max;
+			lifeSim.setMaxNeighborsForCellBirth(max);
+		});
+		
+		const mutationChanceSlider = document.getElementById('mutationChance');
+		const mutationChanceSlidervalue = document.getElementById('mutationChanceSliderValue');
+		mutationChanceSlider.addEventListener('input', function()
+		{
+			let chance = mutationChanceSlider.value / 100.0;
+			mutationChanceSlidervalue.textContent = chance;
+			lifeSim.mutationChance = chance;
+		});
+		
+		const mutationAmountSlider = document.getElementById('mutationAmount');
+		const mutationAmountSlidervalue = document.getElementById('mutationAmountSliderValue');
+		mutationAmountSlider.addEventListener('input', function()
+		{
+			let amount = mutationAmountSlider.value / 100.0;
+			mutationAmountSlidervalue.textContent = amount;
+			lifeSim.mutationAmount = amount;
+		});
+		
+		function resetGAModifiers()
+		{
+			lifeSim.mutationChance = 0.02;
+			lifeSim.mutationAmount = 0.03;
+			const mutationChanceSlider = document.getElementById('mutationChance');
+			const mutationChanceSlidervalue = document.getElementById('mutationChanceSliderValue');
+			const mutationAmountSlider = document.getElementById('mutationAmount');
+			const mutationAmountSlidervalue = document.getElementById('mutationAmountSliderValue');
+			mutationChanceSlider.value = 2;
+			mutationChanceSlidervalue.textContent = 2;
+			mutationAmountSlider.value = 3;
+			mutationAmountSlidervalue.textContent = 3;
+		}
+		
+		const resetGARulesButton = document.getElementById('resetGA');
+		resetGARulesButton.addEventListener('click', function() 
+		{ 
+			resetGAModifiers();
+		});
+		
+		function resetSimulationRules()
+		{
+			lifeSim.setMinNeighborsForLivingCell(2);
+			lifeSim.setMaxNeighborsForLivingCell(3);
+			lifeSim.setMinNeighborsForCellBirth(3);
+			lifeSim.setMaxNeighborsForCellBirth(3);
+			const minNeighborsSlider = document.getElementById('minNeighbors');
+			const minNeighborsSliderValue = document.getElementById('minNeighborsSliderValue');
+			const maxNeighborsSlider = document.getElementById('maxNeighbors');
+			const maxNeighborsSliderValue = document.getElementById('maxNeighborsSliderValue');
+			const minNeighborsForBirthSlider = document.getElementById('minNeighborsForBirth');
+			const minNeighborsForBirthSliderValue = document.getElementById('minNeighborsForBirthSliderValue');
+			const maxNeighborsForBirthSlider = document.getElementById('maxNeighborsForBirth');
+			const maxNeighborsForBirthSliderValue = document.getElementById('maxNeighborsForBirthSliderValue');
+			minNeighborsSlider.value = 2;
+			minNeighborsSliderValue.textContent = 2;
+			maxNeighborsSlider.value = 3;
+			maxNeighborsSliderValue.textContent = 3;
+			minNeighborsForBirthSlider.value = 3;
+			minNeighborsForBirthSliderValue.textContent = 3;
+			maxNeighborsForBirthSlider.value = 3;
+			maxNeighborsForBirthSliderValue.textContent = 3;
+		}
+		const resetRulesButton = document.getElementById('resetRules');
+		resetRulesButton.addEventListener('click', function() 
+		{ 
+			resetSimulationRules();
+		});
+
+ 		//---------------------------------------------------------------------------------
+		// Species selection
+		//---------------------------------------------------------------------------------
+		document.getElementById('redSpecies').addEventListener('click', function() 
+		{ selectedSpecies = Cell.SPECIES_RED; interactionType = INTERACTION_TYPE_CELLS; } );
+		document.getElementById('greenSpecies').addEventListener('click', function() 
+		{ selectedSpecies = Cell.SPECIES_GREEN; interactionType = INTERACTION_TYPE_CELLS;} );
+		document.getElementById('blueSpecies').addEventListener('click', function() 
+		{ selectedSpecies = Cell.SPECIES_BLUE; interactionType = INTERACTION_TYPE_CELLS;} );
+		
+ 		//---------------------------------------------------------------------------------
+		// Special items
+ 		//---------------------------------------------------------------------------------
+		const foodButton = document.getElementById('foodButton');
+		foodButton.addEventListener('click', function() 
+		{ 
+			interactionType = INTERACTION_TYPE_FOOD;
+		});
+		
+		const poisonButton = document.getElementById('poisonButton');
+		poisonButton.addEventListener('click', function() 
+		{ 
+			interactionType = INTERACTION_TYPE_POISON;
+		});
+		
+ 		//---------------------------------------------------------------------------------
+		// Update and render
+		//---------------------------------------------------------------------------------
+		
+		// Function to draw the grid
+        function drawGrid() 
+		{
+            for (let row = 0; row < rows; row++) 
+			{
+                for (let col = 0; col < cols; col++) 
+				{
+					// Draw cells
+					var fillColor = '#121212';
+					var cell = lifeSim.getCell(row, col);
+					if (cell.isAlive())
+					{
+						if (lifeSim.simType == LifeSimulation.SIM_TYPE_CONWAY)
+						{
+							fillColor = 'red';
+						}
+						else switch (displayMode)
+						{
+							case DISPLAY_MODE_NORMAL:
+							default: 
+								fillColor = cell.getColor();
+								break;
+								
+							case DISPLAY_MODE_POISON_RESIST:
+							{
+								let traitValue = cell.poisonResistanceTrait.getValue();
+								let green = MyMath.clamp(traitValue * 255, 30, 255);
+								fillColor = `rgb(30, ${green}, 30)`;
+								break;
+							}
+								
+							case DISPLAY_MODE_FOOD_EFFICIENCY:
+							{
+								let traitValue = cell.foodEfficiencyTrait.getValue();
+								let green = MyMath.clamp(traitValue * 255, 30, 255);
+								fillColor = `rgb(30, ${green}, 30)`;
+								break;
+							}
+								
+							case DISPLAY_MODE_LONGEVITY:
+							{
+								let traitValue = cell.longevityTrait.getValue();
+								let red = MyMath.clamp(traitValue * 255, 30, 255);
+								fillColor = `rgb(${red}, 30, 30)`;
+								break;
+							}
+							
+							case DISPLAY_MODE_REPRODUCTIVITY:
+							{
+								let traitValue = cell.reproductivityTrait.getValue();
+								let red = MyMath.clamp(traitValue * 255, 30, 255);
+								fillColor = `rgb(${red}, 30, 30)`;
+								break;
+							}
+								
+								
+							case DISPLAY_MODE_OVERPOP_RESIST:
+							{
+								let traitValue = cell.overpopulationResistanceTrait.getValue();
+								let blue = MyMath.clamp(traitValue * 255, 30, 255);
+								fillColor = `rgb(30, 30, ${blue})`;
+								break;
+							}
+								
+							case DISPLAY_MODE_UNDERPOP_RESIST:
+							{
+								let traitValue = cell.underpopulationResistanceTrait.getValue();
+								let blue = MyMath.clamp(traitValue * 255, 30, 255);
+								fillColor = `rgb(30, 30, ${blue})`;
+								break;
+							}
+								
+							case DISPLAY_MODE_SPECIES:
+							{
+								let red = 0, green = 0, blue = 0;
+								if (cell.getSpecies() == Cell.SPECIES_RED)
+									red = 255;
+								else if (cell.getSpecies() == Cell.SPECIES_GREEN)
+									green = 255;
+								else 
+									blue = 255;
+								fillColor = `rgb(${red}, ${green}, ${blue})`;
+								break;
+							}
+						}
+					}
+					
+					ctx.fillStyle = fillColor
+					ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+					ctx.strokeStyle = '#333333';
+					ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
+					
+					// Draw food and poison
+					let foodAmount = lifeSim.getGridFoodQuantity(row, col);
+					let poisonAmount = lifeSim.getGridPoisonQuantity(row, col);
+					if (foodAmount > 0.0)
+					{
+						ctx.fillStyle = '#33FF3322';	
+						ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+						ctx.strokeStyle = '#33FF3322';
+						ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
+						ctx.beginPath();
+						ctx.moveTo(col * cellSize, row * cellSize);
+						ctx.lineTo(col * cellSize + cellSize, row * cellSize + cellSize);
+						ctx.stroke();
+					}
+					if (poisonAmount > 0.0)
+					{
+						ctx.fillStyle = '#FF333322';	
+						ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+						ctx.strokeStyle = '#FF333322';
+						ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
+						ctx.beginPath();
+						ctx.moveTo(col * cellSize, row * cellSize);
+						ctx.lineTo(col * cellSize + cellSize, row * cellSize + cellSize);
+						ctx.stroke();
+					}
+                }
+            }
+        }
+			
+        // Function to get the cell coordinates from a mouse event
+        function getCellCoordsFromMouseEvent(event) 
+		{
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            let col = Math.floor(x / cellSize);
+            let row = Math.floor(y / cellSize);
+			if (row < 0) { row = 0; }
+			if (col < 0) { col = 0; }
+			if (row >= rows) { row = rows - 1; }
+			if (col >= cols) { col = cols - 1; }
+            return { row, col };
+        }
+
+        // Handle cell clicks
+        canvas.addEventListener('click', (event) => 
+		{
+            const { row, col } = getCellCoordsFromMouseEvent(event);
+            if (row >= 0 && row < rows && col >= 0 && col < cols) 
+			{
+				if (interactionType == INTERACTION_TYPE_CELLS)
+				{
+					var cell = lifeSim.getCell(row, col);
+					if (cell.isAlive())
+					{
+						lifeSim.killCell(row, col);
+					}
+					else
+					{
+						lifeSim.activateCell(row, col, selectedSpecies);
+					}
+				}
+				else if (interactionType == INTERACTION_TYPE_FOOD)
+				{
+					//console.log(`Adding food at cell ${row},${col}`);
+					lifeSim.addFood(row, col, 100.0);
+				}
+				else if (interactionType == INTERACTION_TYPE_POISON)
+				{
+					lifeSim.addPoison(row, col, 100.0);
+				}
+                drawGrid();
+            }
+        });
+		
+		// Handle mousing over a cell, to get info about it
+		canvas.addEventListener('mousemove', (event) => 
+		{
+			if (showCellToolTips)
+			{
+				const { row, col } = getCellCoordsFromMouseEvent(event);
+				if (row >= 0 && row < rows && col >= 0 && col < cols) 
+				{
+					var cell = lifeSim.getCell(row, col);
+					const rect = canvas.getBoundingClientRect(); 
+					const mouseX = event.clientX - rect.left;       
+					const mouseY = event.clientY - rect.top;
+					// Put the tooltip near the mouse
+					cellTooltip.style.left = `${event.clientX + 10}px`; 
+					cellTooltip.style.top = `${event.clientY + 10}px`;
+					cellTooltip.style.display = 'block';
+					
+					// Add the cell info
+					let infoString = `Cell [${col}][${row}] Alive: ${cell.isAlive()}`;
+					let species = cell.getSpecies();
+					let speciesText = species == Cell.SPECIES_RED ? "red" : species == Cell.SPECIES_GREEN ? "green" : "blue";
+					if (!cell.isAlive()) speciesText = "none";
+					infoString += `\n Species: ${speciesText} DNA: ${cell.getDNA().id}`;
+					let cellPoisonResistance = cell.poisonResistanceTrait.getValue();
+					infoString += `\n PoisonRst: ${cellPoisonResistance}`;
+					let longevity = cell.longevityTrait.getValue();
+					infoString += `\n Longevity: ${longevity}`;
+					let health = cell.getHealth();
+					infoString += `\n Health: ${health}`;
+					cellTooltip.textContent = infoString;
+				}
+				else
+				{
+					cellTooltip.style.display = 'none';
+				}
+			}
+		});
+
+        // Initial draw
+        drawGrid();
+		
+		//----------------------------------------------------------------------
+        // Update and do cool things
+		//----------------------------------------------------------------------
+        function update() 
+		{
+			SetSimulationStateText();
+			
+			// Pause/stepping control
+			if (paused)
+				return;
+				
+			if (stepping && !paused)
+			{
+				paused = true;
+			}
+			
+			lifeSim.update();
+			
+			drawGrid();
+        }
+
+        setInterval(update, 100);
+    </script>
+</body>
+</html>
