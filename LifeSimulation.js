@@ -53,7 +53,7 @@ class LifeSimulation
 	constructor()
 	{
 		this.reset();
-		this.simType = LifeSimulation.SIM_TYPE_CONWAY;
+		this.simType = LifeSimulation.SIM_TYPE_DICKHEISER;
 		
 		// The genetic algorithm instance that will produce new generations 
 		this.ga = new GeneticAlgorithm();
